@@ -1,8 +1,11 @@
 # memory-bridge-mcp
 
 A personal, cross-surface memory system exposed as a remote MCP server — reachable
-from claude.ai (chat/mobile), Claude Code, and (pending verification) Cowork. See
-[TDD.md](./TDD.md) for the full design, scope, and explicit non-goals.
+from claude.ai (chat/mobile) and Claude Code (both live-verified). Cowork is currently
+blocked by a bug on their end, not ours — see ARCHITECTURE.md's Surface support table.
+See
+[ARCHITECTURE.md](./ARCHITECTURE.md) for the current high-level system design, and
+[TDD.md](./TDD.md) for the full design rationale, decision history, and non-goals.
 
 Built on Cloudflare Workers + D1, scaffolded from Cloudflare's official
 `remote-mcp-github-oauth` template. Access is gated by GitHub OAuth plus an
