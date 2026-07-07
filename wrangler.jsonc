@@ -34,14 +34,14 @@
   "kv_namespaces": [
     {
       "binding": "OAUTH_KV",
-      "id": "<Add-KV-ID>"
+      "id": "b1795dbd57ad4364a16879da9f85ab6f"
     }
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "memory-bridge-db",
-      "database_id": "<Add-D1-ID>"
+      "database_id": "48d5c67d-034f-4995-ad99-cd6fd29b8075"
     }
   ],
   "observability": {
