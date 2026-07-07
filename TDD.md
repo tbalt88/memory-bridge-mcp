@@ -621,12 +621,21 @@ exception in our handlers. Concluded this is expected noise from this week's own
 testing sessions (every Claude Code/claude.ai session ending is exactly this kind of
 disconnect), not a bug — documented rather than "fixed," since there's nothing to fix.
 
-## 13. Usage playbook (drafted 2026-07-07 — parked, not yet deployed anywhere)
+## 13. Usage playbook (drafted 2026-07-07, deployed to Claude Code the same day)
 
-**Status: text only. Not yet placed into any surface's instructions (CLAUDE.md,
-claude.ai custom instructions, Cowork equivalent), and the consolidation skill this
-references is not built. Both wait on explicit sign-off before being wired in —
-this section is the draft to review, not a live behavior change.**
+**Status: live on Claude Code.** Signed off and deployed 2026-07-07:
+- Playbook text placed in `~/.claude/CLAUDE.md` (global, so it applies in every Claude
+  Code session on this machine, not just this project).
+- `~/.claude/skills/consolidate-memory-bridge/SKILL.md` built — a personal Claude Code
+  skill (not published to any marketplace), modeled on `consolidate-memory`, pointed at
+  Memory Bridge's MCP tools instead of local files. Bakes in a hard rule: it never
+  calls `memory_delete` itself, regardless of any other standing permission for the
+  session — surfaces duplicate/stale candidates to the user and waits for
+  confirmation before anything is actually deleted.
+- **claude.ai and Cowork custom instructions are still manual, unavoidably** — there's
+  no tool access to those account-level settings pages from here. The same playbook
+  text (below) needs to be pasted in by hand wherever those products expose custom
+  instructions.
 
 This is the "standing instructions" half of the consumption-phase decision from §11 —
 the part that has to live in a persistent instruction layer read on every turn, since
@@ -676,14 +685,11 @@ already do this job for local memory files today.
 > indiscriminately just because something was said; skip the search-before-write step
 > and let near-duplicates accumulate.
 
-### What's still explicitly deferred (not drafted, not built)
+### What's still explicitly deferred (not built)
 
-- **Where this text actually gets placed** (CLAUDE.md, claude.ai custom instructions,
-  Cowork's equivalent) — placement itself is an action to take on signal, not implied
-  by drafting the text.
-- **The consolidation skill** (modeled on the existing `consolidate-memory` skill,
-  pointed at `memory_list_staged`/`memory_search`/`memory_triage` instead of local
-  files) — not built yet.
+- **claude.ai and Cowork placement** — no tool access to those account settings;
+  needs a manual paste of the same playbook text, by the user, in each product's
+  custom-instructions setting.
 - **Automated capture** (the `claude-memory-compiler`-style hook pattern —
   SessionEnd/PreCompact hooks calling the Claude Agent SDK to auto-extract and write,
   rather than relying on the model deciding to call `memory_write` mid-conversation) —
