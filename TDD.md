@@ -768,6 +768,19 @@ no manifest hand-off. It is exactly the scenario the original
 Memory Bridge now does it as a system. The cross-surface, cross-machine premise the
 whole project was built to prove is verified end-to-end.
 
+Verified a second time on the same Windows machine via a *different* retrieval client
+— Claude Code (`memory_ping` first, then search + get of all 4 rows, reassembled to a
+file). Two independent clients (claude.ai browser and Claude Code) both reconstructed
+the guide faithfully from the same stored entries.
+
+**Honest scope note on what "retrieval" means here:** this is a *semantic* round-trip,
+not a byte-exact file copy. Antigravity restructured the original ~7,500-char
+`jarvis_setup_guide.md` into ~6,185 chars across 4 re-headed sections when it wrote
+them; retrieval faithfully returns *that stored version*, not the original Desktop
+file verbatim. That's correct behavior for a memory system (faithful content, not
+file sync) — flagged so the success isn't mistaken for byte-exact replication, which
+is git's job, not this system's.
+
 ## 13. Usage playbook (drafted 2026-07-07, deployed to Claude Code the same day)
 
 **Status: live on Claude Code.** Signed off and deployed 2026-07-07:
