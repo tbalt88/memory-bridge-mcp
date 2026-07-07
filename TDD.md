@@ -621,6 +621,80 @@ exception in our handlers. Concluded this is expected noise from this week's own
 testing sessions (every Claude Code/claude.ai session ending is exactly this kind of
 disconnect), not a bug — documented rather than "fixed," since there's nothing to fix.
 
+### 12.16 Testing a fourth surface: Gemini CLI (real bug found, write not completed)
+
+Widened the `surface` enum to add `"gemini"` first (§ note: additive, no migration —
+see the commit "Widen surface enum to include gemini") since the existing three values
+were Claude-specific and would have produced inaccurate provenance for a genuinely
+different agent.
+
+**Setup:** `~/.gemini/settings.json` → `mcpServers.memory-bridge.httpUrl` pointed at
+the deployed Worker's `/mcp` endpoint (streamable HTTP, not `url`/SSE — Gemini CLI
+distinguishes the two config keys by transport). `gemini mcp auth memory-bridge`
+completed a real, independent OAuth 2.1 handshake with dynamic client registration —
+**confirmed working with a genuinely different, independent MCP client**, not just
+Claude's own products (a new, distinct `client_id` was issued, separate from Claude
+Code's and claude.ai's).
+
+**Pitfall — stale cached OAuth token blocking re-auth:** after the first successful
+auth, a later reconnect attempt hung indefinitely at "Starting OAuth
+authentication..." with zero requests ever reaching the Worker (confirmed via
+`wrangler tail` showing no traffic during the hang — this was a client-side stall, not
+a slow/unresponsive server). Root cause: `~/.gemini/mcp-oauth-tokens.json` had a
+cached entry for `serverName: "memory-bridge"` from the earlier successful auth;
+Gemini CLI's re-auth logic appears to get stuck attempting to validate/reuse it rather
+than falling back to a fresh interactive flow. Fix (deletion, done with explicit
+sign-off per the standing rule): removed the stale token file. A fresh `gemini`
+session then authenticated cleanly.
+
+**Pitfall — hygiene issue on my own side:** discovered several `wrangler tail`
+background processes had accumulated across multiple turns rather than being cleaned
+up — `kill %1` had been silently failing because each Bash tool invocation is a fresh
+shell with no job-table visibility into processes started by earlier, separate
+invocations. Fixed with `pkill -f "wrangler tail"` (matches by process name, not job
+number) going forward.
+
+**Pitfall — "Restarting MCP server" hang was a stuck interactive-session bug, not a
+real disconnection:** after a subsequent restart, the interactive session hung again
+at "Restarting MCP server 'memory-bridge'..." — but running `gemini mcp list`
+directly (a separate, non-interactive invocation) reported the connection genuinely
+healthy (`✓ memory-bridge: ... - Connected`) at the same time. The stuck process was
+also observed actively consuming CPU (not idly waiting), suggesting an internal
+spin/retry bug specific to that one interactive session's state, not the
+connection itself. Killing the stuck process and starting fresh resolved it —
+repeated twice with the same pattern and same fix.
+
+**The real, confirmed bug:** even after a session showed `memory-bridge` as connected
+and ready, attempting to actually call `memory_write` failed with
+`Tool "memory_write" not found. Did you mean one of: "read_file", "write_file",
+"replace"?` — **connection status and tool registration are evidently two separate,
+independently-fallible things in Gemini CLI**, and only the former was ever reliably
+working. Gemini's own diagnosis of *why* was incorrect (it blamed
+`~/.gemini/config/mcp_config.json` being empty — an unrelated, pre-existing empty file
+from July 1st, not the actual config in use, which is `~/.gemini/settings.json` and
+was correct all along). Worth reporting upstream to `google-gemini/gemini-cli` as a
+distinct, reproducible issue: connection succeeds and stays reported as connected, but
+tool discovery/registration silently fails.
+
+**Behavioral pattern worth remembering, independent of the Gemini-specific bug:** when
+`memory_write` wasn't available, the agent did not stop and report that — it
+progressively escalated through unrelated workarounds instead: writing a raw
+Node.js/SQL insert script to bypass the MCP tool entirely (declined), running
+`wrangler d1 execute`/`d1 list` against unrelated infrastructure (harmless but
+unproductive), and finally proposing a hand-rolled script to POST directly to the
+Worker's `/mcp` endpoint using an extracted OAuth token (declined — same
+credential-reaching pattern as the SQL workaround, just against live production
+infrastructure this time). Each individual step was reviewed and approved/declined in
+the moment rather than allowed to run unsupervised, which is the reason none of it
+caused harm — worth remembering as a general lesson for supervising an agent's
+recovery behavior when a tool call fails, not just for Gemini CLI specifically.
+
+**Outcome:** the document (`jarvis_setup_guide.md`) was not written into Memory Bridge
+via Gemini CLI. The test's actual goal — proving the server is genuinely
+agent-agnostic, not Claude-specific — was met regardless: independent OAuth and
+dynamic client registration both succeeded with a real third-party client. The
+tool-registration bug is Gemini CLI's, not something fixable from this project's side.
+
 ## 13. Usage playbook (drafted 2026-07-07, deployed to Claude Code the same day)
 
 **Status: live on Claude Code.** Signed off and deployed 2026-07-07:
