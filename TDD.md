@@ -137,12 +137,20 @@ CREATE TABLE memories (
 - **Chat + Claude Code cross-surface: confirmed working (2026-07-07).** Both connect
   via the Worker's own OAuth provider (GitHub login, dynamic client registration) —
   no Client ID/Secret needed on the claude.ai side, it self-registers.
-- **Cowork custom-connector support: still unconfirmed, leaning negative.** Cowork has
-  its own Connectors directory (Skills / Connectors / Plugins), but it's a curated
-  per-conversation picker with no "custom connector by URL" option found via search.
-  Account-level Cowork settings (as opposed to the in-conversation directory) haven't
-  been exhaustively checked yet. Until resolved, treat cross-surface reach as
-  "chat + Claude Code" only.
+- **Cowork custom-connector support: confirmed broken/inconsistent (2026-07-07), not
+  usable as-is.** Anthropic's own docs state custom remote MCP connectors apply
+  "across every Claude client, including claude.ai, Claude Desktop, Cowork, and the
+  mobile apps." In practice: found Cowork's real account-level Connectors settings
+  (Customize → Connectors, distinct from the in-conversation Directory picker — that
+  one only enables/disables already-added connectors per conversation). The custom
+  connector added via claude.ai does **not** appear there under any tab (All /
+  Connected / Not connected), and searching for it by name returns nothing. Attempting
+  to re-add it by URL fails with "a connector with this URL already exists" — proving
+  the connector genuinely is registered against the account, but Cowork's own UI
+  neither surfaces it nor offers a way to attach/authenticate it for this client.
+  Tried a full reload of the Connectors panel; no change. This is a product-side gap
+  in Cowork, not something fixable from this project's side. **Cross-surface reach is
+  "chat + Claude Code" only, and stays that way unless Cowork fixes this on their end.**
 - **GitHub OAuth template assumes a GitHub-based identity check.** Fine for a
   single-user personal tool; would need rework for multi-user.
 
@@ -359,3 +367,30 @@ Set via `wrangler secret put <NAME>` **run by the user in their own terminal**
 This is the actual confirmation the cross-surface premise works — a memory written
 from one surface, through the shared Worker + D1 backend, is correctly readable from a
 different surface with its provenance intact.
+
+### 12.12 Attempting the third surface: Cowork (unresolved, documented as-is)
+
+1. First checked Cowork's in-conversation "Directory → Connectors" panel. Searching
+   "custom" there returned nothing — but this turned out to be the wrong place: it's a
+   per-conversation enable/disable picker (same role as claude.ai's "+" button), not
+   where connectors get added.
+2. Found the real equivalent: Cowork's account-level **Settings → Customize →
+   Connectors** page. It lists connected/not-connected connectors (GitHub Integration,
+   Google Calendar, Google Drive, Claude in Chrome, etc.) and has its own "Add" button
+   with a "custom connector" option.
+3. Tried adding `https://memory-bridge-mcp.dexevo.workers.dev/mcp` there directly —
+   Cowork rejected it: **"a connector with this URL already exists."** This confirms
+   the connector genuinely is registered at the account level (consistent with
+   Anthropic's own docs saying custom connectors span every client) — Cowork knows
+   about it.
+4. But it does not appear under any tab (All / Connected / Not connected), and
+   searching for it by name in that same settings page returns nothing. There is no
+   path found to authenticate/attach the already-registered connector to Cowork
+   specifically.
+5. Reloaded the Connectors settings panel fully — no change.
+
+**Conclusion:** this is a real gap in Cowork's own product (the connector exists
+server-side but its UI won't surface or connect it), not something this project's
+architecture can work around. Documented here rather than spending further time on it.
+Re-check periodically in case Cowork fixes this on their end — nothing about this
+project needs to change if/when they do.
