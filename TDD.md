@@ -583,3 +583,40 @@ and re-verifying by hand doesn't scale past the first pass.
   no-fields/missing-id/content/tags-replace-not-merge, delete success/missing,
   triage neither/categorize/discard), all passing, wired into `.github/workflows/ci.yml`
   (renamed from `type-check.yml`) alongside the existing type-check step.
+
+### 12.14 Fixing the unhandled-error gap in `src/github-handler.ts` (2026-07-07)
+
+Root cause of the `500` seen back in §12.9: `GET /authorize` had no try/catch at all,
+and `GET /callback` only wrapped its first half (`validateOAuthState`) — the
+Octokit/`completeAuthorization` calls after the token exchange were unprotected too.
+Confirmed via Cloudflare's own Observability data that this specific gap wasn't what
+was showing up there (that turned out to be benign `websocket:close` transport noise,
+§12.15) — but the gap was real regardless and worth closing since bad/malformed
+requests (bots, scanners, a client probing before proper registration) will keep
+hitting it.
+
+Fix: wrapped `GET /authorize` in try/catch (unregistered/malformed clients now return
+a clean `400`, not a raw `500`), wrapped the post-token-exchange half of `GET
+/callback` in its own try/catch (upstream GitHub/OAuth-provider failures now return a
+clean `500` with no stack trace), and added a Hono `app.onError()` catch-all as a last
+line of defense for anything that still slips through. Verified live: re-ran the exact
+bogus-`client_id` request from §12.9 — now returns `400 Invalid authorization request`
+instead of an unhandled `500`.
+
+### 12.15 Observability: a sample "error" turned out to be benign
+
+The user found entries in Cloudflare's Observability dashboard and asked whether we
+had handlers for them. First guess (wrong, but reasonable) was the gap in §12.14.
+Actual sample error, once shared: `"message": "websocket:close"`,
+`"wasClean": false`, `"code": 1006`, `outcome: "exception"`,
+`wallTimeMs: 2, cpuTimeMs: 0`. This is an abnormal WebSocket closure on the MCP
+Durable Object transport (`McpAgent`, using the Workers WebSocket Hibernation API) —
+code 1006 means the connection dropped without a clean close handshake, which happens
+whenever a client disconnects abruptly (laptop sleep, network drop, a terminal or
+browser tab closing mid-session). The near-zero wall/CPU time confirms nothing was
+mid-operation when it happened. Cloudflare's own instrumentation classifies any
+non-clean WebSocket close as `outcome: "exception"` regardless of application code —
+there is no `try/catch` fix for this, since it's a transport-layer event, not a thrown
+exception in our handlers. Concluded this is expected noise from this week's own
+testing sessions (every Claude Code/claude.ai session ending is exactly this kind of
+disconnect), not a bug — documented rather than "fixed," since there's nothing to fix.

@@ -17,35 +17,57 @@ import {
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
+// Last-resort safety net: any exception that escapes a route handler below
+// (including ones not explicitly try/caught) lands here instead of Hono's
+// default unhandled-error response, so nothing leaks a raw stack trace.
+app.onError((error, c) => {
+	console.error("Unhandled error:", error);
+	if (error instanceof OAuthError) {
+		return error.toResponse();
+	}
+	return c.text("Internal server error", 500);
+});
+
 app.get("/authorize", async (c) => {
-	const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
-	const { clientId } = oauthReqInfo;
-	if (!clientId) {
-		return c.text("Invalid request", 400);
+	try {
+		const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
+		const { clientId } = oauthReqInfo;
+		if (!clientId) {
+			return c.text("Invalid request", 400);
+		}
+
+		// Check if client is already approved
+		if (await isClientApproved(c.req.raw, clientId, env.COOKIE_ENCRYPTION_KEY)) {
+			// Skip approval dialog but still create secure state and bind to session
+			const { stateToken } = await createOAuthState(oauthReqInfo, c.env.OAUTH_KV);
+			const { setCookie: sessionBindingCookie } = await bindStateToSession(stateToken);
+			return redirectToGithub(c.req.raw, stateToken, { "Set-Cookie": sessionBindingCookie });
+		}
+
+		// Generate CSRF protection for the approval form
+		const { token: csrfToken, setCookie } = generateCSRFProtection();
+
+		return renderApprovalDialog(c.req.raw, {
+			client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
+			csrfToken,
+			server: {
+				description: "Personal cross-surface memory store, authenticated via GitHub.",
+				logo: "https://avatars.githubusercontent.com/u/314135?s=200&v=4",
+				name: "Memory Bridge MCP",
+			},
+			setCookie,
+			state: { oauthReqInfo },
+		});
+	} catch (error: any) {
+		console.error("GET /authorize error:", error);
+		if (error instanceof OAuthError) {
+			return error.toResponse();
+		}
+		// parseAuthRequest/lookupClient reject on malformed or unregistered
+		// clients (e.g. an unknown client_id) — that's a bad request from the
+		// caller, not a server fault.
+		return c.text("Invalid authorization request", 400);
 	}
-
-	// Check if client is already approved
-	if (await isClientApproved(c.req.raw, clientId, env.COOKIE_ENCRYPTION_KEY)) {
-		// Skip approval dialog but still create secure state and bind to session
-		const { stateToken } = await createOAuthState(oauthReqInfo, c.env.OAUTH_KV);
-		const { setCookie: sessionBindingCookie } = await bindStateToSession(stateToken);
-		return redirectToGithub(c.req.raw, stateToken, { "Set-Cookie": sessionBindingCookie });
-	}
-
-	// Generate CSRF protection for the approval form
-	const { token: csrfToken, setCookie } = generateCSRFProtection();
-
-	return renderApprovalDialog(c.req.raw, {
-		client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
-		csrfToken,
-		server: {
-			description: "Personal cross-surface memory store, authenticated via GitHub.",
-			logo: "https://avatars.githubusercontent.com/u/314135?s=200&v=4",
-			name: "Memory Bridge MCP",
-		},
-		setCookie,
-		state: { oauthReqInfo },
-	});
 });
 
 app.post("/authorize", async (c) => {
@@ -168,37 +190,47 @@ app.get("/callback", async (c) => {
 	});
 	if (errResponse) return errResponse;
 
-	// Fetch the user info from GitHub
-	const user = await new Octokit({ auth: accessToken }).rest.users.getAuthenticated();
-	const { login, name, email } = user.data;
+	try {
+		// Fetch the user info from GitHub
+		const user = await new Octokit({ auth: accessToken }).rest.users.getAuthenticated();
+		const { login, name, email } = user.data;
 
-	// Return back to the MCP client a new token
-	const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
-		metadata: {
-			label: name,
-		},
-		// This will be available on this.props inside MyMCP
-		props: {
-			accessToken,
-			email,
-			login,
-			name,
-		} as Props,
-		request: oauthReqInfo,
-		scope: oauthReqInfo.scope,
-		userId: login,
-	});
+		// Return back to the MCP client a new token
+		const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
+			metadata: {
+				label: name,
+			},
+			// This will be available on this.props inside MyMCP
+			props: {
+				accessToken,
+				email,
+				login,
+				name,
+			} as Props,
+			request: oauthReqInfo,
+			scope: oauthReqInfo.scope,
+			userId: login,
+		});
 
-	// Clear the session binding cookie (one-time use) by creating response with headers
-	const headers = new Headers({ Location: redirectTo });
-	if (clearSessionCookie) {
-		headers.set("Set-Cookie", clearSessionCookie);
+		// Clear the session binding cookie (one-time use) by creating response with headers
+		const headers = new Headers({ Location: redirectTo });
+		if (clearSessionCookie) {
+			headers.set("Set-Cookie", clearSessionCookie);
+		}
+
+		return new Response(null, {
+			status: 302,
+			headers,
+		});
+	} catch (error: any) {
+		console.error("GET /callback error (post-token-exchange):", error);
+		if (error instanceof OAuthError) {
+			return error.toResponse();
+		}
+		// GitHub's user-info API or completeAuthorization failed unexpectedly —
+		// this is an upstream/server-side fault, not a bad request from the caller.
+		return c.text("Authorization failed", 500);
 	}
-
-	return new Response(null, {
-		status: 302,
-		headers,
-	});
 });
 
 export { app as GitHubHandler };
