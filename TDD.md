@@ -781,6 +781,40 @@ file verbatim. That's correct behavior for a memory system (faithful content, no
 file sync) — flagged so the success isn't mistaken for byte-exact replication, which
 is git's job, not this system's.
 
+### 12.19 Update operation verified from Windows — and a client no-op caught first
+
+Tested `memory_update` end-to-end from Claude Code on the Windows machine (which fills
+the last empty cell in the matrix — Windows had only done reads until now; an update
+is a write).
+
+**First attempt — a silent client no-op, caught only by independent verification.**
+Asked Claude Code to append a line to the Overview entry (`97d39c37`) and it reported
+"done." Querying D1 directly told a different story: `updated_at` had bumped
+(17:55:42 → 18:36:46, so a real update write *did* reach the server), but the content
+`length` was **identical** (835 → 835) and pulling the full text confirmed the intended
+line was absent. The client had read the entry via `memory_get` and then called
+`memory_update` with the **original content unchanged** — a no-op edit. The server
+behaved perfectly (accepted the write, bumped the timestamp, left `tags`/`category`/
+`status` and the other three entries untouched); the gap was entirely client-side.
+This is the single clearest vindication of the whole-project discipline: **never trust
+a client's "done" — verify against the store.** Metadata alone (`updated_at` changed)
+would have produced a false positive; only reading the actual content caught it.
+
+**Second attempt — real change, landed and verified.** Re-ran with an explicit
+"show the new content before writing, and confirm the new length is larger" instruction
+so the client couldn't silently no-op again. Result on `97d39c37`: title changed to
+`# Jarvis Setup Guide - Modified — Razer Blade Stealth 13`, `length` 835 → 846 (+11,
+exactly the length of the inserted `" - Modified"` — clean edit, no corruption),
+`updated_at` bumped to 18:44:30, and everything else (VRAM table, recommendation,
+tags, category, status, the other three entries) unchanged. `memory_update` proven
+end-to-end with a genuine content change.
+
+**Operational status after this:** full CRUD live-verified across the cross-machine
+setup — Create (Antigravity/Mac), Read (claude.ai + Claude Code, both machines),
+Update (Claude Code/Windows), plus Classify (§12.11) and Ping (§12.17). Delete remains
+deliberately unexercised on real data (the standing "ask before deleting" rule; the
+only `memory_delete` run all project was on a throwaway skill-test entry).
+
 ## 13. Usage playbook (drafted 2026-07-07, deployed to Claude Code the same day)
 
 **Status: live on Claude Code.** Signed off and deployed 2026-07-07:
