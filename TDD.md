@@ -747,7 +747,26 @@ agent-agnostic.
 `surface: "gemini"`, but Antigravity is a *distinct* client from Gemini CLI. The value
 is defensible as "Gemini/Google-family" but not literally precise. Options left open:
 leave as-is, or add an `"antigravity"` value to the surface enum and re-tag. Flagged
-here rather than silently accepted.
+here rather than silently accepted. (Left as-is per the user's call.)
+
+### 12.18 Cross-machine retrieval — the whole point, proven
+
+Immediately after §12.17, tested the actual end-to-end premise: retrieving those same
+4 Antigravity-written entries from a **different machine** (a Windows box) in a
+**different client**, with zero setup on that machine. Path used: claude.ai in a
+browser — since custom connectors are account-level (tied to the Anthropic account,
+not the machine), the `memory-bridge` connector was already available on the Windows
+machine's browser session with nothing to install or re-add. Asked it to search for
+the Jarvis setup guide and retrieve it in full; it pulled all 4 chunks and reassembled
+them into the complete, coherent document.
+
+This is the capstone: content **written** by a non-Claude client (Antigravity) on the
+Mac, **stored** chunked in Cloudflare D1, **retrieved and reassembled** by a different
+client (claude.ai) on a different machine (Windows) — automatically, no file copying,
+no manifest hand-off. It is exactly the scenario the original
+`STAGE_7_WINDOWS_HANDOFF.md` manifest was solving by hand in the predecessor project;
+Memory Bridge now does it as a system. The cross-surface, cross-machine premise the
+whole project was built to prove is verified end-to-end.
 
 ## 13. Usage playbook (drafted 2026-07-07, deployed to Claude Code the same day)
 
