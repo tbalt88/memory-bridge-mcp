@@ -96,15 +96,20 @@ claude.ai's web/mobile MCP connector (see TDD.md §5, §12.1).
 
 ## Consumption layer (how Claude actually uses this day to day)
 
-Two pieces, living outside this repo, on the machine running Claude Code:
+Three pieces, on the machine running Claude Code:
 
 - **`~/.claude/CLAUDE.md`** — global standing instructions: when to write, when to
   search first, suggested category taxonomy, the "never `memory_delete` without
-  asking" rule.
+  asking" rule. (Manual/opportunistic capture: the model decides to write mid-session.)
 - **`~/.claude/skills/consolidate-memory-bridge/SKILL.md`** — a personal Claude Code
   skill that triages the staged queue, merges near-duplicate active entries, and flags
   likely-stale ones. Never deletes on its own — surfaces candidates and waits for
   confirmation.
+- **`hooks/capture-session.sh`** (installed as a Claude Code `SessionEnd` hook) —
+  **automatic** capture. On every session end it spawns a detached headless `claude`
+  (Haiku) that reads the transcript, extracts durable facts, and writes them to Memory
+  Bridge — no user action. `memory_ping`-first (beats the MCP connection race),
+  recursion-guarded. See [hooks/README.md](./hooks/README.md).
 
 claude.ai and Cowork don't read `~/.claude/CLAUDE.md`; the same instruction text needs
 manually pasting into each product's own custom-instructions setting if you want the

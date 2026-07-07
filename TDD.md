@@ -815,6 +815,54 @@ Update (Claude Code/Windows), plus Classify (§12.11) and Ping (§12.17). Delete
 deliberately unexercised on real data (the standing "ask before deleting" rule; the
 only `memory_delete` run all project was on a throwaway skill-test entry).
 
+### 12.20 Automatic capture — headless SessionEnd hook (built and verified)
+
+The last remaining Level 1 piece: making capture *automatic* rather than depending on
+the model deciding to call `memory_write` mid-session. User chose the fully-automatic
+design (over a deferred-to-next-session queue or a manual-trigger one).
+
+**Design constraint that shaped everything:** a Claude Code hook is a shell command —
+it can't run an LLM, so "decide what's worth remembering" can't happen inside the
+hook. Resolved by having the hook spawn a **detached headless `claude -p`** (defaulting
+to **Haiku** — extraction is cheap) that does the LLM work. Lives at
+`hooks/capture-session.sh`, installed as a global `SessionEnd` hook.
+
+**Two real problems hit and fixed during the build:**
+
+1. **Path-parsing / export-ordering bugs, caught before testing.** First draft split
+   the SessionEnd JSON fields with word-splitting `read` (breaks on the spaces in this
+   machine's paths, e.g. "Gemini Learning Collection") and exported the prompt env var
+   *after* the spawn that used it. Rewrote with line-per-field `IFS= read` parsing and
+   correct export ordering.
+
+2. **The MCP connection race — the interesting one.** First live test: the Haiku agent
+   read the transcript and made *exactly* the right editorial calls (captured a durable
+   "standardize on Rust 2024 + thiserror" decision, correctly skipped an ephemeral
+   "build broke, nevermind fixed it" line) — but wrote **nothing**, reporting
+   "memory-bridge is still connecting." A freshly-spawned headless session races the
+   remote server's OAuth/Durable-Object connection setup and gave up before it was
+   ready. **Fix: instruct the agent to call `memory_ping` first and retry until it
+   returns ok, only then writing** — the connection warms during the retries. This is
+   the second time `memory_ping` (built in §12.17 for exactly the "is it actually
+   connected?" question) paid off. Also added a `curl` Worker warm-up before the spawn.
+
+**Verified end-to-end (independently, via direct D1 query — not the agent's self-report,
+which has produced false "done"s twice this project):** re-ran the test; code-surface
+count went 1 → 3, both Rust entries genuinely present with `category: preference`,
+`surface: code`, `session_id` tracing to the capture, sensible tags — and the ephemeral
+line correctly absent. Recursion guard confirmed held (exactly one capture, no runaway
+capture-of-the-capture): the headless agent carries `MEMORY_BRIDGE_CAPTURE=1`, which
+the hook checks first-thing and no-ops on.
+
+**Note — the 2 Rust entries are test fixtures, not real user preferences** (the user
+never actually standardized on Rust 2024/thiserror; it was transcript bait). They are
+plausible-looking false memories and should be removed so they don't mislead future
+sessions — pending the standing ask-before-delete gate.
+
+This closes Level 1's last open build item. Capture is now both **opportunistic**
+(the CLAUDE.md playbook, model-driven mid-session) and **automatic** (this hook, on
+every session end). See `hooks/README.md` for the full design, install, and config.
+
 ## 13. Usage playbook (drafted 2026-07-07, deployed to Claude Code the same day)
 
 **Status: live on Claude Code.** Signed off and deployed 2026-07-07:
