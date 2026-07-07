@@ -620,3 +620,72 @@ there is no `try/catch` fix for this, since it's a transport-layer event, not a 
 exception in our handlers. Concluded this is expected noise from this week's own
 testing sessions (every Claude Code/claude.ai session ending is exactly this kind of
 disconnect), not a bug — documented rather than "fixed," since there's nothing to fix.
+
+## 13. Usage playbook (drafted 2026-07-07 — parked, not yet deployed anywhere)
+
+**Status: text only. Not yet placed into any surface's instructions (CLAUDE.md,
+claude.ai custom instructions, Cowork equivalent), and the consolidation skill this
+references is not built. Both wait on explicit sign-off before being wired in —
+this section is the draft to review, not a live behavior change.**
+
+This is the "standing instructions" half of the consumption-phase decision from §11 —
+the part that has to live in a persistent instruction layer read on every turn, since
+(unlike a Skill) it can't be selectively invoked. Draws on real prior art rather than
+inventing from nothing: the category taxonomy below is adapted from
+`centminmod/my-claude-code-setup`'s memory-bank file convention (decisions / patterns /
+troubleshooting / active-context), broadened to match this project's own scope
+(technical *and* personal, not code-only); the "don't skip search-before-write" and
+staleness rules mirror this session's own general auto-memory instructions, which
+already do this job for local memory files today.
+
+### Draft playbook text
+
+> **Write (`memory_write`)** — when the user states a durable fact, decision,
+> preference, or project detail that isn't already captured, or right after completing
+> a nontrivial task/decision worth recalling later. Always set the correct `surface`
+> and a `session_id`. **Search first** (`memory_search`) — if a close match already
+> exists, prefer `memory_update` over writing a near-duplicate. If the right category
+> isn't obvious yet, omit `category` and leave it staged rather than guessing.
+>
+> **Suggested categories** (a starting taxonomy, not a closed list):
+> `decision`, `preference`, `project-fact`, `troubleshooting`, `reference` — adapted
+> from `my-claude-code-setup`'s memory-bank convention, broadened past code-only
+> concerns since this project's scope is technical and personal.
+>
+> **Read (`memory_search` / `memory_get`)** — before answering anything that plausibly
+> depends on prior context or a past decision; at the start of a new
+> topic/session, to check whether relevant context already exists, not just when
+> explicitly asked to "check memory."
+>
+> **Classify (`memory_triage` / `memory_list_staged`)** — periodically, or when asked
+> to "check staged memories," review the staged queue and resolve each entry: assign a
+> category or discard it. Don't leave things staged indefinitely once a topic has
+> become clear.
+>
+> **Trust, not blind recall** — a memory is a claim about what was true *when it was
+> written*. Before acting on a retrieved memory for something consequential (a
+> function name, a file path, a URL, a technical recommendation), verify it's still
+> accurate rather than assuming persistence equals correctness — the same rule this
+> session's own memory system already follows.
+>
+> **Provenance when it matters** — when surfacing a retrieved memory back to the user,
+> mention where and when it came from if that affects how much to trust it (e.g. "this
+> was written three weeks ago from Claude Code").
+>
+> **Don't**: write ephemeral/task-local details that won't matter next session; write
+> indiscriminately just because something was said; skip the search-before-write step
+> and let near-duplicates accumulate.
+
+### What's still explicitly deferred (not drafted, not built)
+
+- **Where this text actually gets placed** (CLAUDE.md, claude.ai custom instructions,
+  Cowork's equivalent) — placement itself is an action to take on signal, not implied
+  by drafting the text.
+- **The consolidation skill** (modeled on the existing `consolidate-memory` skill,
+  pointed at `memory_list_staged`/`memory_search`/`memory_triage` instead of local
+  files) — not built yet.
+- **Automated capture** (the `claude-memory-compiler`-style hook pattern —
+  SessionEnd/PreCompact hooks calling the Claude Agent SDK to auto-extract and write,
+  rather than relying on the model deciding to call `memory_write` mid-conversation) —
+  a real, working pattern (`github.com/coleam00/claude-memory-compiler`, 1.2k+ stars),
+  but a heavier build than the playbook text above and not started.
