@@ -4,7 +4,8 @@ A personal, cross-surface memory system exposed as a remote MCP server — reach
 from claude.ai (chat/mobile) and Claude Code (both live-verified). Cowork is currently
 blocked by a bug on their end, not ours — see ARCHITECTURE.md's Surface support table.
 See
-[ARCHITECTURE.md](./ARCHITECTURE.md) for the current high-level system design, and
+[ARCHITECTURE.md](./ARCHITECTURE.md) for the current high-level system design,
+[TESTING.md](./TESTING.md) for the test record and a runnable interactive test plan, and
 [TDD.md](./TDD.md) for the full design rationale, decision history, and non-goals.
 
 Built on Cloudflare Workers + D1, scaffolded from Cloudflare's official
