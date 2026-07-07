@@ -637,6 +637,17 @@ disconnect), not a bug — documented rather than "fixed," since there's nothing
   text (below) needs to be pasted in by hand wherever those products expose custom
   instructions.
 
+**Live-verified the same day.** Seeded test data via Cowork's Memory Bridge connection
+(two staged entries, one near-duplicate `project-fact` pair), then ran the skill from
+a fresh Claude Code session (a session already running before the skill file was
+created did not see it — confirming skills are indexed at session start, a restart is
+required to pick up a newly added one). Result: all three staged entries (including
+one genuine leftover from the original cross-surface test weeks earlier, not part of
+this test batch) triaged sensibly; the duplicate pair correctly merged via
+`memory_update` into the older entry; the skill **stopped and asked before deleting**
+the now-redundant newer entry rather than calling `memory_delete` itself — the
+deletion-requires-confirmation rule held under real use, not just as written intent.
+
 This is the "standing instructions" half of the consumption-phase decision from §11 —
 the part that has to live in a persistent instruction layer read on every turn, since
 (unlike a Skill) it can't be selectively invoked. Draws on real prior art rather than
