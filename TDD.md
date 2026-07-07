@@ -3,7 +3,11 @@
 A cross-surface personal memory system reachable from Claude chat (web/mobile), Claude
 Code, and Cowork, via a single hosted remote MCP server.
 
-Status: v1 design, locked for initial build. Project name is provisional.
+Status: v1 built and deployed to `https://memory-bridge-mcp.dexevo.workers.dev`.
+Live-verified cross-surface on 2026-07-07: a `memory_write` from Claude Code was
+read back via `memory_search` from claude.ai chat, with content, id, and `surface`
+provenance all intact. Cowork reach is still unconfirmed (see §10). Project name is
+provisional.
 
 ## 1. Problem
 
@@ -130,9 +134,15 @@ CREATE TABLE memories (
 
 ## 10. Open risks
 
-- **Cowork custom-connector support is unconfirmed.** If Cowork's settings don't expose
-  an equivalent to claude.ai's "add custom connector by URL," cross-surface reach
-  shrinks to "chat + Claude Code" until/unless Cowork adds it.
+- **Chat + Claude Code cross-surface: confirmed working (2026-07-07).** Both connect
+  via the Worker's own OAuth provider (GitHub login, dynamic client registration) —
+  no Client ID/Secret needed on the claude.ai side, it self-registers.
+- **Cowork custom-connector support: still unconfirmed, leaning negative.** Cowork has
+  its own Connectors directory (Skills / Connectors / Plugins), but it's a curated
+  per-conversation picker with no "custom connector by URL" option found via search.
+  Account-level Cowork settings (as opposed to the in-conversation directory) haven't
+  been exhaustively checked yet. Until resolved, treat cross-surface reach as
+  "chat + Claude Code" only.
 - **GitHub OAuth template assumes a GitHub-based identity check.** Fine for a
   single-user personal tool; would need rework for multi-user.
 
