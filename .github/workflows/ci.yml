@@ -1,11 +1,11 @@
-name: Type check
+name: CI
 
 on:
   push:
   pull_request:
 
 jobs:
-  type-check:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,3 +14,4 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run type-check
+      - run: npm run test

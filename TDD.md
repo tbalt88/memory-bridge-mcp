@@ -245,8 +245,14 @@ Returns on success: `{ "id": "<uuid>", "status": "archived" }` (discard path) or
 - **DNS/hosting:** existing Cloudflare-managed domain, one new route. No new
   registrations beyond enabling Workers + D1 (both free-tier eligible at this scale).
 - **Deploy:** `wrangler` CLI.
-- **CI:** minimal GitHub Action — type-check / `wrangler deploy --dry-run` on every
-  push. From commit one, not bolted on later.
+- **Tests:** Vitest + `@cloudflare/vitest-pool-workers`, running against a real
+  Miniflare D1 binding (migrations applied via `applyD1Migrations` in a setup file) —
+  not mocks. Tool logic lives in `src/memory.ts` as plain functions taking a
+  `D1Database`, with `src/index.ts`'s MCP tool handlers as thin wrappers around them,
+  specifically so the logic is unit-testable without simulating the OAuth/Durable
+  Object/MCP-protocol stack.
+- **CI:** GitHub Action — type-check + test suite on every push. From commit one, not
+  bolted on later.
 
 ## 9. Build steps
 
@@ -535,3 +541,45 @@ server-side but its UI won't surface or connect it), not something this project'
 architecture can work around. Documented here rather than spending further time on it.
 Re-check periodically in case Cowork fixes this on their end — nothing about this
 project needs to change if/when they do.
+
+### 12.13 Adding a test suite (2026-07-07)
+
+Reason for doing this now: every tool had only ever been verified by hand, through
+real Claude Code/claude.ai sessions — real proof, but not repeatable automatically,
+and re-verifying by hand doesn't scale past the first pass.
+
+- **Refactor first:** the tool logic lived as closures inside `this.server.tool(...)`
+  calls in `src/index.ts`, coupled to the MCP/Durable Object/OAuth machinery. Testing
+  it directly would mean simulating that whole stack. Extracted the actual D1
+  operations into plain functions in `src/memory.ts` (`writeMemory`, `searchMemories`,
+  `getMemory`, `listStaged`, `updateMemory`, `deleteMemory`, `triageMemory`), each
+  taking a `D1Database` and returning plain data — `src/index.ts` now just shapes
+  their output into MCP's `{ content: [...] }` response format.
+- **Chose `@cloudflare/vitest-pool-workers`** over mocking D1, specifically so tests
+  run against a real Miniflare-backed D1 binding rather than a fake — same rationale
+  as "verify live, not just by reading code," one level down from full end-to-end.
+- **Pitfall:** `vitest.config.ts` failed to load —
+  `Failed to resolve "@cloudflare/vitest-pool-workers". This package is ESM only but
+  it was tried to load by 'require'`. **Cause:** the package is ESM-only, and without
+  `"type": "module"` in `package.json`, Vite's config loader tries to load a plain
+  `.ts` config file as CJS. **Fix:** renamed the file to `vitest.config.mts` — the
+  explicit ESM extension makes Vite load it correctly without having to change the
+  whole package's module type.
+- **D1 migrations in tests:** found Cloudflare's own fixture example
+  (`cloudflare/workers-sdk` repo, `fixtures/vitest-pool-workers-examples/d1`) rather
+  than guessing the API — current pattern is `readD1Migrations()` in the config file,
+  passed to Miniflare as a `TEST_MIGRATIONS` binding, applied via `applyD1Migrations()`
+  in a `setupFiles` entry (`test/apply-migrations.ts`). Confirmed both `env` (from
+  `cloudflare:workers`) and `applyD1Migrations` (from `cloudflare:test`) are the
+  correct imports for this package version (0.18.0 / vitest 4.1.x) directly from that
+  fixture, rather than from older recalled API shapes.
+- **Same `Env` type-augmentation issue recurred, same fix applies (see §12.3):**
+  `TEST_MIGRATIONS` needed declaring in both the global `interface Env` and
+  `namespace Cloudflare { interface Env {...} }` in `test/vitest-env.d.ts` — one wasn't
+  enough, for the same reason as before (the `cloudflare:workers` module's `env`
+  export is typed against `Cloudflare.Env`, not the bare global `Env`).
+- **Result:** 17 tests across all 7 operations (write staged/active/tags, search
+  substring/filters/50-row cap, get missing→null, list_staged ordering, update
+  no-fields/missing-id/content/tags-replace-not-merge, delete success/missing,
+  triage neither/categorize/discard), all passing, wired into `.github/workflows/ci.yml`
+  (renamed from `type-check.yml`) alongside the existing type-check step.
