@@ -291,6 +291,19 @@ Returns on success: `{ "id": "<uuid>", "status": "archived" }` (discard path) or
 - Hierarchical/nested categories, if flat tags prove insufficient in practice.
 - Jarvis-Desktop-Voice-Assistant integration ("Level 2"), after Jarvis is rewritten into
   original work.
+- **Consumption phase (2026-07-07, direction chosen, not yet designed or built):** with
+  the server itself up, running, and CRUD+Classify-complete, the next real phase is
+  making Claude sessions actually *use* it day to day, rather than only via manual
+  tool-name invocations like the ones used for testing so far. Direction chosen: a
+  combination of (a) a usage playbook — instructions (CLAUDE.md/system-prompt style)
+  telling a connected Claude session when to proactively call
+  `memory_write`/`memory_search`/`memory_triage`, the same role this very session's own
+  auto-memory instructions play, but backed by Memory Bridge instead of local files —
+  and (b) an automated hook/skill that calls the tools at specific trigger points
+  (e.g. session-start context pull, session-end summary write) without depending on the
+  model deciding to on its own. Explicitly deferred pending further clarification in a
+  future session before design or implementation starts — do not build this from this
+  note alone.
 
 ## 12. Build log — the actual process, in order, including what broke
 
