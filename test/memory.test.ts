@@ -4,6 +4,7 @@ import {
 	deleteMemory,
 	getMemory,
 	listStaged,
+	ping,
 	searchMemories,
 	triageMemory,
 	updateMemory,
@@ -12,6 +13,15 @@ import {
 
 beforeEach(async () => {
 	await env.DB.prepare("DELETE FROM memories").run();
+});
+
+describe("ping", () => {
+	it("returns ok with no DB access", () => {
+		const result = ping();
+		expect(result.ok).toBe(true);
+		expect(result.server).toBe("memory-bridge-mcp");
+		expect(() => new Date(result.time).toISOString()).not.toThrow();
+	});
 });
 
 describe("writeMemory", () => {

@@ -65,10 +65,11 @@ memories (
   single-surface memory tool would never need.
 - `tags`: comma-separated string, no nesting.
 
-## Tool surface (7 tools — CRUD + Classify)
+## Tool surface (8 tools — CRUD + Classify + Diagnostics)
 
 | Op | Tool(s) |
 |---|---|
+| Diagnostics | `memory_ping` (no DB access, no side effects — connectivity smoke test) |
 | Create | `memory_write` |
 | Read | `memory_search`, `memory_get`, `memory_list_staged` |
 | Update | `memory_update` (content/tags/surface only) |

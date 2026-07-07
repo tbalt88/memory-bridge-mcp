@@ -100,10 +100,10 @@ CREATE TABLE memories (
 );
 ```
 
-## 7. Tool interface (v1.1 — CRUD + Classify, seven tools)
+## 7. Tool interface (v1.2 — CRUD + Classify + Diagnostics, eight tools)
 
 This is the actual client-facing contract, transcribed from the zod schemas and
-handlers in `src/index.ts` — not a paraphrase. All seven tools require an
+handlers in `src/index.ts` — not a paraphrase. All eight tools require an
 authenticated MCP session (GitHub OAuth via the Worker's own OAuth provider, §5) and
 are only registered at all if `this.props.login` is in `ALLOWED_USERNAMES`; an
 unauthorized login simply gets no tools, not an error.
@@ -111,10 +111,11 @@ unauthorized login simply gets no tools, not an error.
 Every response is MCP's standard `{ content: [{ type: "text", text: <JSON string> }] }`
 shape — the `text` field is JSON-encoded and must be parsed by the caller.
 
-Organized by CRUD role, since that's how they get used:
+Organized by role, since that's how they get used:
 
 | Operation | Tool(s) |
 |---|---|
+| Diagnostics | `memory_ping` |
 | Create | `memory_write` |
 | Read | `memory_search`, `memory_get`, `memory_list_staged` |
 | Update | `memory_update` |
@@ -126,6 +127,22 @@ into one do-everything tool: `memory_update` edits an entry's *content* (content
 surface) and never touches `category`/`status`; `memory_triage` (the Classify
 operation) only ever touches `category`/`status` and never touches content. One tool,
 one responsibility, no overlap to reason about.
+
+### Diagnostics
+
+#### `memory_ping`
+
+No parameters, no DB access, no side effects. Returns
+`{ "ok": true, "server": "memory-bridge-mcp", "time": "<iso timestamp>" }`.
+
+Added after the Gemini CLI test (§12.16) surfaced a real gap: a client can report a
+healthy MCP *connection* while its internal tool registration has silently failed, so
+every real tool call fails with "tool not found" — indistinguishable, from the
+caller's side, from a genuine server problem, until you've already invested real
+effort investigating. `memory_ping` doesn't detect or fix that class of client bug
+(any tool call fails identically), but it makes discovering it cost one cheap call
+instead of a long investigation. Recommended as the first call when integrating any
+new, previously-untested client — see the playbook in `~/.claude/CLAUDE.md`.
 
 ### Create
 

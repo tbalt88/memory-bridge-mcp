@@ -7,6 +7,7 @@ import {
 	deleteMemory,
 	getMemory,
 	listStaged,
+	ping,
 	searchMemories,
 	triageMemory,
 	updateMemory,
@@ -30,6 +31,15 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 		}
 
 		const db = this.env.DB;
+
+		this.server.tool(
+			"memory_ping",
+			"Zero-side-effect connectivity check — no DB access. Call this first when integrating a new client, so a broken tool registration surfaces in one cheap call instead of partway through a real write.",
+			{},
+			async () => {
+				return { content: [{ type: "text", text: JSON.stringify(ping()) }] };
+			},
+		);
 
 		this.server.tool(
 			"memory_write",

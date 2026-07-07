@@ -13,6 +13,15 @@ export type MemoryRow = {
 export type Surface = "chat" | "cowork" | "code" | "gemini";
 export type Status = "active" | "staged" | "archived";
 
+// Zero-side-effect connectivity check. No DB access, no auth beyond what
+// getting a tool call through at all already proves. Recommended as the
+// first call from any newly-integrated client, so a broken tool
+// registration (connected but tools unusable) surfaces in one cheap call
+// instead of discovering it partway through a real write.
+export function ping(): { ok: true; server: string; time: string } {
+	return { ok: true, server: "memory-bridge-mcp", time: new Date().toISOString() };
+}
+
 export async function writeMemory(
 	db: D1Database,
 	params: { content: string; category?: string; tags?: string[]; surface: Surface; session_id?: string },
