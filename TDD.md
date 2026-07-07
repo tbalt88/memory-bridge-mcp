@@ -100,16 +100,34 @@ CREATE TABLE memories (
 );
 ```
 
-## 7. Tool interface (v1 — five tools, nothing else)
+## 7. Tool interface (v1.1 — CRUD + Classify, seven tools)
 
 This is the actual client-facing contract, transcribed from the zod schemas and
-handlers in `src/index.ts` — not a paraphrase. All five tools require an
+handlers in `src/index.ts` — not a paraphrase. All seven tools require an
 authenticated MCP session (GitHub OAuth via the Worker's own OAuth provider, §5) and
 are only registered at all if `this.props.login` is in `ALLOWED_USERNAMES`; an
 unauthorized login simply gets no tools, not an error.
 
 Every response is MCP's standard `{ content: [{ type: "text", text: <JSON string> }] }`
 shape — the `text` field is JSON-encoded and must be parsed by the caller.
+
+Organized by CRUD role, since that's how they get used:
+
+| Operation | Tool(s) |
+|---|---|
+| Create | `memory_write` |
+| Read | `memory_search`, `memory_get`, `memory_list_staged` |
+| Update | `memory_update` |
+| Delete | `memory_delete` |
+| Classify | `memory_triage` |
+
+`memory_update` and `memory_triage` are deliberately kept separate rather than merged
+into one do-everything tool: `memory_update` edits an entry's *content* (content, tags,
+surface) and never touches `category`/`status`; `memory_triage` (the Classify
+operation) only ever touches `category`/`status` and never touches content. One tool,
+one responsibility, no overlap to reason about.
+
+### Create
 
 #### `memory_write`
 
@@ -130,6 +148,8 @@ Returns: `{ "id": "<uuid>", "status": "active" | "staged" }`
 the current UTC ISO timestamp. There is no explicit error path — malformed input is
 rejected by the zod schema itself before the handler runs (MCP-level validation error,
 not a tool-level one).
+
+### Read
 
 #### `memory_search`
 
@@ -159,6 +179,45 @@ error, a null payload the caller must check for.
 No parameters. Returns: JSON array of all rows where `status = 'staged'`, ordered
 `created_at ASC` (oldest first — true FIFO). No result cap (staged queue is expected
 to stay small; revisit if that assumption breaks).
+
+### Update
+
+#### `memory_update`
+
+Edits an existing entry's content, tags, or surface. Never touches `category` or
+`status` — that's `memory_triage`'s job (see Classify below).
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | yes | The memory's `id`. |
+| `content` | string | no | Replaces the stored content entirely. |
+| `tags` | string[] | no | Replaces the entire tag list (not a merge/append). |
+| `surface` | `"chat" \| "cowork" \| "code"` | no | Replaces the stored surface. |
+
+At least one of `content`/`tags`/`surface` must be provided, and the `id` must exist —
+both are explicit **MCP tool errors** (`isError: true`):
+`"Provide at least one of content, tags, or surface."` and
+`"No entry with id <id>."` respectively.
+
+Returns on success: `{ "id": "<uuid>", "updated_at": "<iso timestamp>" }`.
+
+### Delete
+
+#### `memory_delete`
+
+Permanently removes a row — a **hard delete**, not archiving. For a reversible
+removal, use `memory_triage` with `discard: true` instead (sets `status: 'archived'`,
+keeps the row).
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | yes | The memory's `id`. |
+
+Returns: `{ "id": "<uuid>", "deleted": true }` on success. If no row matched (`id`
+didn't exist), returns `{ "id": "<uuid>", "deleted": false }` as an **MCP tool error**
+(`isError: true`) rather than silently no-opping.
+
+### Classify
 
 #### `memory_triage`
 

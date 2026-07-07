@@ -123,6 +123,66 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 		);
 
 		this.server.tool(
+			"memory_update",
+			"Edit an existing entry's content, tags, or surface. Does not touch category/status — use memory_classify for that.",
+			{
+				id: z.string(),
+				content: z.string().optional(),
+				tags: z.array(z.string()).optional().describe("Replaces the existing tag list entirely."),
+				surface: z.enum(["chat", "cowork", "code"]).optional(),
+			},
+			async ({ id, content, tags, surface }) => {
+				if (content === undefined && tags === undefined && surface === undefined) {
+					return {
+						content: [{ type: "text", text: "Provide at least one of content, tags, or surface." }],
+						isError: true,
+					};
+				}
+				const existing = await db.prepare("SELECT id FROM memories WHERE id = ?").bind(id).first();
+				if (!existing) {
+					return { content: [{ type: "text", text: `No entry with id ${id}.` }], isError: true };
+				}
+				const sets: string[] = [];
+				const params: unknown[] = [];
+				if (content !== undefined) {
+					sets.push("content = ?");
+					params.push(content);
+				}
+				if (tags !== undefined) {
+					sets.push("tags = ?");
+					params.push(tags.join(","));
+				}
+				if (surface !== undefined) {
+					sets.push("surface = ?");
+					params.push(surface);
+				}
+				const now = new Date().toISOString();
+				sets.push("updated_at = ?");
+				params.push(now);
+				params.push(id);
+				await db
+					.prepare(`UPDATE memories SET ${sets.join(", ")} WHERE id = ?`)
+					.bind(...params)
+					.run();
+				return { content: [{ type: "text", text: JSON.stringify({ id, updated_at: now }) }] };
+			},
+		);
+
+		this.server.tool(
+			"memory_delete",
+			"Permanently delete an entry. This is a hard delete, not archiving — use memory_classify with discard for a reversible removal instead.",
+			{ id: z.string() },
+			async ({ id }) => {
+				const result = await db.prepare("DELETE FROM memories WHERE id = ?").bind(id).run();
+				const deleted = (result.meta?.changes ?? 0) > 0;
+				return {
+					content: [{ type: "text", text: JSON.stringify({ id, deleted }) }],
+					isError: !deleted,
+				};
+			},
+		);
+
+		this.server.tool(
 			"memory_triage",
 			"Resolve a staged memory entry: assign it a category, or discard it.",
 			{
