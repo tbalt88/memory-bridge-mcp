@@ -10,7 +10,7 @@ export type MemoryRow = {
 	updated_at: string;
 };
 
-export type Surface = "chat" | "cowork" | "code";
+export type Surface = "chat" | "cowork" | "code" | "gemini";
 export type Status = "active" | "staged" | "archived";
 
 export async function writeMemory(

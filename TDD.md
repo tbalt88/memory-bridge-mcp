@@ -93,7 +93,7 @@ CREATE TABLE memories (
   category TEXT,              -- null = staged/untriaged
   tags TEXT,                  -- comma-separated, deliberately flat, no nesting
   status TEXT NOT NULL,        -- 'active' | 'staged' | 'archived'
-  surface TEXT NOT NULL,       -- 'chat' | 'cowork' | 'code'
+  surface TEXT NOT NULL,       -- 'chat' | 'cowork' | 'code' | 'gemini'
   session_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -139,7 +139,7 @@ forcing a guess.
 | `content` | string | yes | The memory text. |
 | `category` | string | no | Omit to stage the entry (`status` becomes `"staged"`). |
 | `tags` | string[] | no | Flat list; stored joined by commas. No hierarchy. |
-| `surface` | `"chat" \| "cowork" \| "code"` | yes | Provenance — where this memory originated. |
+| `surface` | `"chat" \| "cowork" \| "code" \| "gemini"` | yes | Provenance — where this memory originated. |
 | `session_id` | string | no | Caller-supplied session identifier on that surface. |
 
 Returns: `{ "id": "<uuid>", "status": "active" | "staged" }`
@@ -159,7 +159,7 @@ Keyword filter, no embeddings/semantic matching in v1 (§3, non-goals).
 |---|---|---|---|
 | `query` | string | yes | Matched as `content LIKE '%query%'`. |
 | `tags` | string | no | Matched as `tags LIKE '%tags%'` (substring, not exact-tag match). |
-| `surface` | `"chat" \| "cowork" \| "code"` | no | Exact match filter. |
+| `surface` | `"chat" \| "cowork" \| "code" \| "gemini"` | no | Exact match filter. |
 | `status` | `"active" \| "staged" \| "archived"` | no | Exact match filter. |
 
 Returns: JSON array of matching rows (see §6 schema for row shape), ordered
@@ -192,7 +192,7 @@ Edits an existing entry's content, tags, or surface. Never touches `category` or
 | `id` | string | yes | The memory's `id`. |
 | `content` | string | no | Replaces the stored content entirely. |
 | `tags` | string[] | no | Replaces the entire tag list (not a merge/append). |
-| `surface` | `"chat" \| "cowork" \| "code"` | no | Replaces the stored surface. |
+| `surface` | `"chat" \| "cowork" \| "code" \| "gemini"` | no | Replaces the stored surface. |
 
 At least one of `content`/`tags`/`surface` must be provided, and the `id` must exist —
 both are explicit **MCP tool errors** (`isError: true`):

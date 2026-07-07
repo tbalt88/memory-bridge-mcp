@@ -61,7 +61,7 @@ memories (
 
 - `status`: `active` | `staged` | `archived`. New entries without a `category` land as
   `staged` (a FIFO triage queue) rather than forcing a guess.
-- `surface`: `chat` | `cowork` | `code` — provenance, since this is the one property a
+- `surface`: `chat` | `cowork` | `code` | `gemini` — provenance, since this is the one property a
   single-surface memory tool would never need.
 - `tags`: comma-separated string, no nesting.
 

@@ -38,7 +38,7 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 				content: z.string().describe("The memory content."),
 				category: z.string().optional().describe("Leave unset to stage for triage."),
 				tags: z.array(z.string()).optional().describe("Flat tags, no hierarchy."),
-				surface: z.enum(["chat", "cowork", "code"]).describe("Where this memory originated."),
+				surface: z.enum(["chat", "cowork", "code", "gemini"]).describe("Where this memory originated."),
 				session_id: z.string().optional().describe("Session identifier on that surface."),
 			},
 			async (params) => {
@@ -53,7 +53,7 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 			{
 				query: z.string().describe("Substring to match against content."),
 				tags: z.string().optional().describe("Substring to match against stored tags."),
-				surface: z.enum(["chat", "cowork", "code"]).optional(),
+				surface: z.enum(["chat", "cowork", "code", "gemini"]).optional(),
 				status: z.enum(["active", "staged", "archived"]).optional(),
 			},
 			async (params) => {
@@ -84,7 +84,7 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 				id: z.string(),
 				content: z.string().optional(),
 				tags: z.array(z.string()).optional().describe("Replaces the existing tag list entirely."),
-				surface: z.enum(["chat", "cowork", "code"]).optional(),
+				surface: z.enum(["chat", "cowork", "code", "gemini"]).optional(),
 			},
 			async (params) => {
 				const result = await updateMemory(db, params);
