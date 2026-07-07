@@ -155,3 +155,207 @@ CREATE TABLE memories (
 - Hierarchical/nested categories, if flat tags prove insufficient in practice.
 - Jarvis-Desktop-Voice-Assistant integration ("Level 2"), after Jarvis is rewritten into
   original work.
+
+## 12. Build log — the actual process, in order, including what broke
+
+Written so this doesn't have to be re-derived or re-debugged from memory. Every pitfall
+below was hit for real during the initial build (2026-07-06/07), not anticipated in
+advance.
+
+### 12.1 Auth architecture decision, before any code
+
+Before scaffolding anything, checked whether **Cloudflare Access** (an SSO wall placed
+in front of the Worker route) was viable as the auth gate, since it requires no custom
+code. Found an open, reproduced bug:
+[anthropics/claude-ai-mcp#410](https://github.com/anthropics/claude-ai-mcp/issues/410)
+— claude.ai's web/mobile MCP connector fails against a Cloudflare Access "Managed
+OAuth" gate (Access completes its own OAuth handshake before the request reaches the
+Worker; claude.ai's client can't complete that browser redirect or send Access's custom
+headers). Claude Code hits the same URL fine — the bug is specific to the web/mobile
+connector, which is exactly the surface this project needs.
+
+**Decision made from that finding:** use the Worker-embedded OAuth pattern instead
+(`@cloudflare/workers-oauth-provider`, GitHub as identity provider) — Cloudflare's own
+official template for this, proven to work with claude.ai's connector. See §5.
+
+### 12.2 Scaffolding the template
+
+Ran `npm create cloudflare@latest -- --template=cloudflare/ai/demos/remote-mcp-github-oauth`.
+
+- **Pitfall:** scaffolding directly into the project directory failed —
+  `create-cloudflare` refuses to scaffold into a non-empty directory, and `TDD.md`
+  already existed there.
+  **Fix:** scaffolded into a scratch/temp directory instead, then moved every file
+  (including dotfiles — `.gitignore`, `.dev.vars.example` — which a plain glob move
+  misses) into the real project directory.
+- **Pitfall:** the scaffold process hung on an interactive prompt ("Do you want to add
+  an AGENTS.md file?") that doesn't have a non-interactive flag.
+  **Fix:** all real template files were already copied to disk by that point in the
+  process; just proceeded without answering it. No functional loss — AGENTS.md is
+  optional editor tooling, not part of the app.
+
+### 12.3 Customizing the template into the actual project
+
+Replaced the demo's tools (`add`, `userInfoOctokit`, `generateImage`) with the five
+memory tools from §7, added the D1 migration from §6, renamed the project in
+`wrangler.jsonc` and `package.json`, removed the unused `ai` binding, added
+`ALLOWED_USERNAMES = new Set(["tbalt88"])` as the access-control gate.
+
+- **Pitfall:** `npm run type-check` failed on `GITHUB_CLIENT_ID`,
+  `GITHUB_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY` — "does not exist on type Env."
+  **Cause:** these are `wrangler secret put` values, never declared as `vars` in
+  `wrangler.jsonc`, so `wrangler types` has no way to know they exist.
+  **First fix attempt (partial):** added `src/env.d.ts` augmenting the global
+  `interface Env`. This fixed usages via Hono's `c.env`, but two errors remained on
+  lines using `import { env } from "cloudflare:workers"`.
+  **Root cause of the remainder:** that import's `env` constant is typed as
+  `Cloudflare.Env` (a *namespaced* interface), not the bare global `Env` — augmenting
+  one does not merge into the other even though both structurally extend the same base.
+  **Real fix:** augment *both* the global `interface Env` and
+  `declare namespace Cloudflare { interface Env {...} }` in `src/env.d.ts`. Also
+  removed the stale `@cloudflare/workers-types` dependency and its `"types"` entry in
+  `tsconfig.json` in favor of `wrangler types`' own generated runtime types plus
+  `@types/node` (per `wrangler types`' own printed migration notice) — this wasn't the
+  actual root cause but is the currently-correct setup regardless.
+
+### 12.4 Git identity
+
+`git init` succeeded but committing would have failed — **no `user.name`/`user.email`
+configured anywhere on this machine, local or global.** Asked the user rather than
+guessing or silently setting global config. Resolved by setting it globally from the
+GitHub account's own profile (`gh api user`): name "DDomingo", email
+`dmdomingo@gmail.com`.
+
+### 12.5 Cloudflare authentication: token over interactive login
+
+`wrangler login` needs a browser click tied to the human's own session, which isn't
+practical for an agent to drive. Used a scoped Cloudflare **API token** instead
+(Account: Workers Scripts:Edit, D1:Edit, Workers KV Storage:Edit, Account Settings:Read,
+optionally Zone Workers Routes:Edit), created manually via
+`dash.cloudflare.com/profile/api-tokens` (no CLI path exists for token creation).
+
+- **Pitfall (environment persistence):** `export CLOUDFLARE_API_TOKEN=...` run in the
+  user's interactive terminal was invisible to the agent's own tool calls.
+  **Cause:** each tool-driven shell command starts fresh; it doesn't inherit variables
+  from a separate, already-running interactive terminal process.
+  **First fix attempt (incomplete):** added the export to `~/.zshrc`. Still invisible.
+  **Real cause:** zsh only sources `~/.zshrc` for *interactive* shells; tool-driven
+  commands run as *non-interactive* shells, which only source `~/.zshenv`.
+  **Real fix:** put the export in `~/.zshenv` instead.
+
+- **Incident — credential exposure, and how it happened:** while checking whether the
+  variable was set, used the shell pattern `${VAR:+yes}${VAR:-no}` intending a safe
+  yes/no boolean check. **This pattern is broken when the variable is set:** `:+yes`
+  correctly yields `"yes"`, but `:-no` is *not* a paired "else" — it substitutes the
+  default only when the variable is unset/empty, so when the variable **is** set, `:-no`
+  evaluates to the variable's actual value and gets appended right after "yes". The
+  real token value was printed into tool output (and thus this conversation).
+  **Response:** disclosed the mistake immediately, the user rotated/revoked that token
+  and issued a new one. **Correct pattern going forward:**
+  `if [ -n "$VAR" ]; then echo yes; else echo no; fi` — no interpolation of the value
+  under any branch.
+
+- **Pitfall (stale shell state, recurrence of a similar class of bug):** even after
+  fixing `.zshenv` and rotating the token, `wrangler secret put` failed from the user's
+  terminal with `Invalid access token [code: 9109]` while the agent's own tool calls
+  authenticated fine with the same variable.
+  **Cause:** editing `~/.zshenv` does not retroactively update a terminal
+  tab/window that was already open before the edit — that shell was still holding an
+  old/stale token value from whenever it last read its environment.
+  **Fix:** `source ~/.zshenv` in the already-open terminal (or open a new tab/window).
+
+- **Separate, unrelated transient failure:** a `Too many authentication failures
+  [code: 10502]` error appeared once. Confirmed via the agent's own `wrangler whoami`
+  that the token itself was valid at that moment — this was Cloudflare-side rate
+  limiting after a burst of attempts, not a real credential problem. Resolved itself;
+  no action needed beyond retrying.
+
+### 12.6 First deploy: missing workers.dev subdomain
+
+`wrangler deploy` failed: `You need a workers.dev subdomain` — this Cloudflare account
+had never hosted a Worker before, so no subdomain existed yet.
+
+- **First fix attempt:** asked the user to open the Workers & Pages dashboard once,
+  since Cloudflare's own error message says this auto-provisions a subdomain on first
+  visit. Visiting the page did not trigger any prompt for this account, and the
+  subdomain still didn't exist afterward (confirmed via a direct
+  `GET /accounts/{id}/workers/subdomain` API call, which returned a 404-shaped error).
+  **Real fix:** created the subdomain directly via the Cloudflare API —
+  `PUT /accounts/{id}/workers/subdomain` with body `{"subdomain": "<name>"}`.
+  **Judgment call, not automatic:** a workers.dev subdomain is effectively permanent
+  (Cloudflare requires a support ticket to change it) and becomes part of every
+  Worker's public URL on the account — asked the user to choose the name (picked
+  `dexevo`) rather than picking one unilaterally, given how hard-to-reverse it is.
+
+Deploy then succeeded: `https://memory-bridge-mcp.dexevo.workers.dev`.
+
+### 12.7 D1 database and KV namespace
+
+`wrangler d1 create memory-bridge-db` and `wrangler kv namespace create OAUTH_KV` both
+succeeded cleanly (no pitfalls) once authenticated — returned
+`database_id: 48d5c67d-034f-4995-ad99-cd6fd29b8075` and
+`id: b1795dbd57ad4364a16879da9f85ab6f` respectively, wired into `wrangler.jsonc`
+replacing the `<Add-D1-ID>` / `<Add-KV-ID>` placeholders. `wrangler d1 migrations apply
+memory-bridge-db --remote` applied `0001_init.sql` (4 commands: the table plus its two
+indexes) with no issues.
+
+### 12.8 GitHub OAuth App and Worker secrets
+
+Created manually at github.com/settings/developers (GitHub has no API for OAuth App
+creation) — Homepage URL and Authorization callback URL set to the real deployed
+Worker URL (`.../callback`). One point of confusion worth flagging: GitHub's settings
+page has two similar-looking flows, **"OAuth Apps"** and **"GitHub Apps"** — this
+project needs the former; the latter uses a different, incompatible auth flow.
+
+`COOKIE_ENCRYPTION_KEY` caused separate confusion — it is **not** related to GitHub at
+all, it's a value the Worker invents purely to encrypt its own session cookies.
+Generated with `openssl rand -hex 32`, nothing to "regenerate," just a fresh random
+value created once.
+
+Set via `wrangler secret put <NAME>` **run by the user in their own terminal**
+(deliberately not piped through the agent, to avoid a repeat of the exposure in §12.5).
+
+### 12.9 Post-deploy sanity checks
+
+- `GET /mcp` unauthenticated → `401`. Correct — protected route rejecting
+  unauthenticated requests.
+- `GET /authorize?client_id=test...` → `500`. Investigated via `wrangler tail`
+  (worked around the Bash tool's missing `timeout` command on macOS by running `tail`
+  in the background and sleeping around a `curl` call instead). Log showed
+  `Invalid client. The clientId provided does not match to this client.` — expected:
+  a raw curl with a made-up `client_id` skips the dynamic client registration
+  (`/register`) step that real MCP clients perform automatically. Not a bug.
+
+### 12.10 Connecting real clients
+
+- **Claude Code:** `claude mcp add --transport http memory-bridge <url>/mcp` only
+  writes the server config to `~/.claude.json` (scoped to the project directory it was
+  run from) — **it does not connect or authenticate at add-time.** The OAuth handshake
+  only fires on the first real connection attempt, which meant starting/restarting a
+  Claude Code session rooted at the project directory and running `/mcp` inside it,
+  selecting the server, and pressing Enter to trigger the GitHub OAuth browser flow.
+  This was the source of "it didn't prompt me for OAuth" confusion — the prompt was
+  never supposed to appear until this step.
+- **claude.ai:** Settings → Customize → Connectors → Add custom connector → paste the
+  URL. **Leave the OAuth Client ID / Secret fields blank** — those are only for
+  upstream OAuth servers that don't support dynamic client registration; this server
+  does (`clientRegistrationEndpoint: "/register"` in `src/index.ts`), so claude.ai
+  registers itself automatically.
+- **Cowork:** checked its in-conversation "Directory → Connectors" panel; found a
+  curated picker (Skills / Connectors / Plugins tabs, popular SaaS connectors) with no
+  "custom connector by URL" option surfaced via its search box. Inconclusive, not
+  confirmed impossible — account-level Cowork settings (as opposed to this
+  in-conversation picker) haven't been checked yet. Treat as "leaning negative" per §10
+  until someone actually looks there.
+
+### 12.11 Live verification (the actual proof, not just "it deployed")
+
+1. From Claude Code: `memory_write("test entry from Claude Code", surface: "code")` →
+   returned an id, `status: "staged"` (correct — no category was given).
+   `memory_list_staged()` → confirmed the same entry present.
+2. From claude.ai chat: `memory_search("test entry")` → returned the **same id**
+   (`3ed413bf-7fbe-4a2f-9c81-c57ceb7d2b5f`), same content, `surface: "code"` intact.
+
+This is the actual confirmation the cross-surface premise works — a memory written
+from one surface, through the shared Worker + D1 backend, is correctly readable from a
+different surface with its provenance intact.
