@@ -712,6 +712,43 @@ agent-agnostic, not Claude-specific — was met regardless: independent OAuth an
 dynamic client registration both succeeded with a real third-party client. The
 tool-registration bug is Gemini CLI's, not something fixable from this project's side.
 
+### 12.17 Fifth surface: Antigravity 2.0 — full end-to-end success, loop closed
+
+After Gemini CLI's tool-registration failure, tried Google's Antigravity IDE 2.0 — a
+genuinely distinct client from Gemini CLI (different codebase; it only shares the
+`~/.gemini/config/mcp_config.json` config location and Google's OAuth machinery).
+
+**Config difference worth recording:** Antigravity uses `serverUrl` for a remote HTTP
+MCP server, *not* `httpUrl` (Gemini CLI) or `url` (SSE / Cursor / VS Code). Same
+top-level `mcpServers` wrapper. OAuth left implicit (dynamic discovery), same as the
+Gemini CLI setup. UI path in 2.0: Settings (bottom-left) → Customizations → Installed
+MCP Servers → Refresh.
+
+**Result — everything Gemini CLI failed at worked here:**
+- Connected, authenticated via GitHub OAuth (dynamic discovery), green status.
+- **All 8 tools registered and showed as enabled** (including `memory_ping`, added
+  earlier the same day) — this is the exact step that silently failed in Gemini CLI.
+- `memory_ping` called and returned success — a real tool call executing end-to-end,
+  not just a UI status claim. First real use of `memory_ping`, doing exactly its job:
+  cheaply confirming the round-trip before trusting the client with real content.
+- `jarvis_setup_guide.md` written via `memory_write` as 4 chunked entries
+  (`97d39c37`, `f7224b69`, `69ce5fb3`, `ff4e13b1`), `category: setup-guide`. **Verified
+  independently** by querying D1 directly (not trusting the client's self-report, per
+  the discipline that caught Gemini fabricating a source-code-derived answer earlier):
+  all four rows present, correct provenance, sensible per-section chunking.
+
+This closes the loop that had been open since the start of the Gemini testing: a real,
+independent, non-Claude client authenticating, registering tools, and completing a
+verified write end-to-end. Confirms definitively that the earlier failure was Gemini
+CLI's client bug, not anything in this server's design — the architecture is genuinely
+agent-agnostic.
+
+**Provenance caveat (honest, not yet corrected):** these 4 entries are stored with
+`surface: "gemini"`, but Antigravity is a *distinct* client from Gemini CLI. The value
+is defensible as "Gemini/Google-family" but not literally precise. Options left open:
+leave as-is, or add an `"antigravity"` value to the surface enum and re-tag. Flagged
+here rather than silently accepted.
+
 ## 13. Usage playbook (drafted 2026-07-07, deployed to Claude Code the same day)
 
 **Status: live on Claude Code.** Signed off and deployed 2026-07-07:
