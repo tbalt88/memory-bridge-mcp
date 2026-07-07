@@ -100,14 +100,83 @@ CREATE TABLE memories (
 );
 ```
 
-## 7. Tool surface (v1 — five tools, nothing else)
+## 7. Tool interface (v1 — five tools, nothing else)
 
-1. `memory_write(content, category?, tags?, surface, session_id)` — `category` omitted
-   → `status = 'staged'`.
-2. `memory_search(query, tags?, surface?, status?)` — SQL filter, no embeddings.
-3. `memory_get(id)`
-4. `memory_list_staged()` — the FIFO queue for manual review.
-5. `memory_triage(id, category | discard)` — resolves a staged entry.
+This is the actual client-facing contract, transcribed from the zod schemas and
+handlers in `src/index.ts` — not a paraphrase. All five tools require an
+authenticated MCP session (GitHub OAuth via the Worker's own OAuth provider, §5) and
+are only registered at all if `this.props.login` is in `ALLOWED_USERNAMES`; an
+unauthorized login simply gets no tools, not an error.
+
+Every response is MCP's standard `{ content: [{ type: "text", text: <JSON string> }] }`
+shape — the `text` field is JSON-encoded and must be parsed by the caller.
+
+#### `memory_write`
+
+Store a new entry. Omitting `category` leaves it staged for later triage instead of
+forcing a guess.
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `content` | string | yes | The memory text. |
+| `category` | string | no | Omit to stage the entry (`status` becomes `"staged"`). |
+| `tags` | string[] | no | Flat list; stored joined by commas. No hierarchy. |
+| `surface` | `"chat" \| "cowork" \| "code"` | yes | Provenance — where this memory originated. |
+| `session_id` | string | no | Caller-supplied session identifier on that surface. |
+
+Returns: `{ "id": "<uuid>", "status": "active" | "staged" }`
+
+`id` is server-generated (`crypto.randomUUID()`); `created_at`/`updated_at` are set to
+the current UTC ISO timestamp. There is no explicit error path — malformed input is
+rejected by the zod schema itself before the handler runs (MCP-level validation error,
+not a tool-level one).
+
+#### `memory_search`
+
+Keyword filter, no embeddings/semantic matching in v1 (§3, non-goals).
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `query` | string | yes | Matched as `content LIKE '%query%'`. |
+| `tags` | string | no | Matched as `tags LIKE '%tags%'` (substring, not exact-tag match). |
+| `surface` | `"chat" \| "cowork" \| "code"` | no | Exact match filter. |
+| `status` | `"active" \| "staged" \| "archived"` | no | Exact match filter. |
+
+Returns: JSON array of matching rows (see §6 schema for row shape), ordered
+`created_at DESC`, **capped at 50 results** — no pagination in v1.
+
+#### `memory_get`
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | yes | The memory's `id`. |
+
+Returns: the row as JSON, or JSON `null` if no entry has that id — **not** an MCP
+error, a null payload the caller must check for.
+
+#### `memory_list_staged`
+
+No parameters. Returns: JSON array of all rows where `status = 'staged'`, ordered
+`created_at ASC` (oldest first — true FIFO). No result cap (staged queue is expected
+to stay small; revisit if that assumption breaks).
+
+#### `memory_triage`
+
+Resolves a staged entry one of two ways — assign it a category, or discard it.
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | yes | The memory's `id`. |
+| `category` | string | no* | Required unless `discard: true`. |
+| `discard` | boolean | no* | If `true`, archives the entry; `category` is ignored in this case. |
+
+\* Exactly one resolution path must apply: if `discard` is not `true` and `category`
+is absent, the tool returns an **MCP tool error** (`isError: true`) with text
+`"Provide either category or discard: true."` — this is the one tool with an explicit
+error case a caller needs to handle.
+
+Returns on success: `{ "id": "<uuid>", "status": "archived" }` (discard path) or
+`{ "id": "<uuid>", "status": "active", "category": "<category>" }` (categorize path).
 
 ## 8. Tech stack
 
