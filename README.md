@@ -56,6 +56,39 @@ carry the full machinery.
   the reversible route.
 - `memory_triage(id, category | discard)`
 
+## Engineering notes
+
+An honest account of what was inherited versus built, and the parts worth a
+code-reader's attention:
+
+- **Provenance, precisely.** The OAuth transport — `workers-oauth-utils.ts`,
+  `utils.ts`, and the route skeleton of `github-handler.ts` — comes from
+  Cloudflare's official template, kept deliberately: commodity auth is not where a
+  memory system differentiates. Everything memory is original: the eight-tool
+  surface (`src/memory.ts`, `src/index.ts`), the D1 schema and its
+  staged → active/archived lifecycle (`migrations/0001_init.sql`), the allowlist
+  gate, the test suite, and all four documents. The commit history discloses which
+  is which from the first commit message onward.
+- **`memory_ping` exists because of a real bug.** Integrating Gemini CLI surfaced a
+  silent tool-registration failure: the client reported connected while every real
+  tool call failed identically (TDD.md §12.16). The response was API design — a
+  zero-side-effect connectivity check, so any new client integration fails in one
+  cheap call instead of partway through a real write. It has been the first call on
+  every new surface since.
+- **Tests run against real D1, not mocks.** The 18 Vitest cases execute against a
+  Miniflare-backed D1 binding via `@cloudflare/vitest-pool-workers`, chosen over
+  mocking specifically because a mocked database cannot catch SQL-shape mistakes
+  (TDD.md §12.9–12.10, TESTING.md).
+- **More documentation than code.** Roughly 1,400 lines of docs against roughly 700
+  lines of memory-system TypeScript: ARCHITECTURE.md for the current design,
+  TESTING.md for the verified test record, TDD.md for every decision, rejected
+  alternative, and numbered pitfall. The repo is meant to be auditable, not just
+  runnable.
+- **Surface support is reported honestly.** claude.ai and Claude Code are
+  live-verified. Gemini CLI was tested and produced the bug above. Cowork is
+  blocked by a documented bug on their side — reported as blocked, not glossed
+  into a fourth green checkmark.
+
 ## Setup
 
 ### 1. GitHub OAuth App
