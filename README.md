@@ -13,13 +13,47 @@ Built on Cloudflare Workers + D1, scaffolded from Cloudflare's official
 allowlist of GitHub logins (`ALLOWED_USERNAMES` in `src/index.ts`) — this is a
 single-user personal store, not a multi-tenant service.
 
+## Part of a two-tier memory architecture
+
+This server is tier 1 of a two-tier personal memory system.
+
+- **Tier 1 — Memory Bridge (this repo):** fast, atomic recall reachable from every
+  surface — claude.ai, Claude Code, Gemini CLI. Answers "what is true right now."
+- **Tier 2 — the vault:** an AI-operated Obsidian vault holding the narrative
+  archive — daily notes, debriefs with `file:line` citations, decision history.
+  Answers "what happened, and why." Its complete machinery is public at
+  [second-brain-template](https://github.com/tbalt88/second-brain-template).
+
+```mermaid
+flowchart LR
+    Agent["Agent (Claude Code / claude.ai / Gemini CLI)"]
+    MB[("Tier 1: Memory Bridge\nWorkers + D1")]
+    Vault[("Tier 2: Obsidian vault\nfiles on disk")]
+    Agent -- "atomic facts" --> MB
+    Agent -- "narrative notes" --> Vault
+    MB -- "mb_sync.py (one-way mirror)" --> Vault
+```
+
+**The boundary rule:** the Bridge wins for "what is true right now"; the vault wins
+for history and full context. An agent that finds a conflict between the two applies
+this rule instead of guessing.
+
+The author's live instance runs both tiers daily on private data; the public repos
+carry the full machinery.
+
 ## Tools
 
+- `memory_ping()` — zero-side-effect connectivity check, no DB access. Call first on
+  any new client integration so a broken tool registration surfaces in one cheap call.
 - `memory_write(content, category?, tags?, surface, session_id)` — omit `category` to
   leave the entry staged for later triage.
 - `memory_search(query, tags?, surface?, status?)` — keyword filter, no embeddings in v1.
 - `memory_get(id)`
 - `memory_list_staged()` — the untriaged FIFO queue.
+- `memory_update(id, content?, tags?, surface?)` — edits content/tags/surface only;
+  tags replace, not merge. Category/status changes go through `memory_triage`.
+- `memory_delete(id)` — hard delete, irreversible. `memory_triage` with `discard` is
+  the reversible route.
 - `memory_triage(id, category | discard)`
 
 ## Setup

@@ -19,7 +19,7 @@ import type { Props } from "./utils";
 // single-user store — GitHub OAuth alone proves identity, not authorization.
 const ALLOWED_USERNAMES = new Set<string>(["tbalt88"]);
 
-export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
+export class MemoryBridgeMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
 		name: "Memory Bridge MCP",
 		version: "1.0.0",
@@ -138,7 +138,7 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 }
 
 export default new OAuthProvider({
-	apiHandler: MyMCP.serve("/mcp"),
+	apiHandler: MemoryBridgeMCP.serve("/mcp"),
 	apiRoute: "/mcp",
 	authorizeEndpoint: "/authorize",
 	clientRegistrationEndpoint: "/register",
