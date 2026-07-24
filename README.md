@@ -1,5 +1,13 @@
 # memory-bridge-mcp
 
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+[![CI](https://github.com/tbalt88/memory-bridge-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tbalt88/memory-bridge-mcp/actions/workflows/ci.yml)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange)
+![TypeScript](https://img.shields.io/badge/TypeScript-blue)
+![MCP](https://img.shields.io/badge/MCP-remote%20server-purple)
+
+*This system is part of the working record behind my [AIDLC series](https://www.linkedin.com/in/dexterdomingo/) on AI-driven development.*
+
 A personal, cross-surface memory system exposed as a remote MCP server — reachable
 from claude.ai (chat/mobile) and Claude Code (both live-verified). Cowork is currently
 blocked by a bug on their end, not ours — see ARCHITECTURE.md's Surface support table.
@@ -12,6 +20,16 @@ Built on Cloudflare Workers + D1, scaffolded from Cloudflare's official
 `remote-mcp-github-oauth` template. Access is gated by GitHub OAuth plus an
 allowlist of GitHub logins (`ALLOWED_USERNAMES` in `src/index.ts`) — this is a
 single-user personal store, not a multi-tenant service.
+
+### Table of Contents
+
+- [Part of a two-tier memory architecture](#part-of-a-two-tier-memory-architecture)
+- [Tools](#tools)
+- [Engineering notes](#engineering-notes)
+- [Agent memory: practices this system encodes](#agent-memory-practices-this-system-encodes)
+- [Setup](#setup)
+- [Local development](#local-development)
+- [Why not Cloudflare Access as the auth gate](#why-not-cloudflare-access-as-the-auth-gate)
 
 ## Part of a two-tier memory architecture
 
@@ -41,6 +59,8 @@ this rule instead of guessing.
 The author's live instance runs both tiers daily on private data; the public repos
 carry the full machinery.
 
+<p align="right">(<a href="#memory-bridge-mcp">back to top</a>)</p>
+
 ## Tools
 
 - `memory_ping()` — zero-side-effect connectivity check, no DB access. Call first on
@@ -55,6 +75,8 @@ carry the full machinery.
 - `memory_delete(id)` — hard delete, irreversible. `memory_triage` with `discard` is
   the reversible route.
 - `memory_triage(id, category | discard)`
+
+<p align="right">(<a href="#memory-bridge-mcp">back to top</a>)</p>
 
 ## Engineering notes
 
@@ -88,6 +110,8 @@ code-reader's attention:
   live-verified. Gemini CLI was tested and produced the bug above. Cowork is
   blocked by a documented bug on their side — reported as blocked, not glossed
   into a fourth green checkmark.
+
+<p align="right">(<a href="#memory-bridge-mcp">back to top</a>)</p>
 
 ## Agent memory: practices this system encodes
 
@@ -127,6 +151,8 @@ lives in code.
    and the human owns anything irreversible. Memory infrastructure that quietly
    drives actions is an authorization problem wearing a persistence costume.
    *(Design stance, enforced by the allowlist and the client rules above.)*
+
+<p align="right">(<a href="#memory-bridge-mcp">back to top</a>)</p>
 
 ## Setup
 
@@ -174,6 +200,8 @@ npm run deploy
 - **Cowork**: check its settings for the same custom-connector-by-URL mechanism —
   unconfirmed as of this writing, see TDD.md §10.
 
+<p align="right">(<a href="#memory-bridge-mcp">back to top</a>)</p>
+
 ## Local development
 
 Create a second, separate GitHub OAuth App pointed at `http://localhost:8788` /
@@ -194,6 +222,8 @@ npm run dev
 
 Inspect with the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector):
 `npx @modelcontextprotocol/inspector@latest`, pointed at `http://localhost:8788/mcp`.
+
+<p align="right">(<a href="#memory-bridge-mcp">back to top</a>)</p>
 
 ## Why not Cloudflare Access as the auth gate
 
