@@ -89,6 +89,45 @@ code-reader's attention:
   blocked by a documented bug on their side — reported as blocked, not glossed
   into a fourth green checkmark.
 
+## Agent memory: practices this system encodes
+
+Opinionated, and each one is running here, not proposed. Some are enforced by the
+server; the rest are operating rules its clients follow — the split is marked,
+because a practice that lives in a prompt is a different guarantee than one that
+lives in code.
+
+1. **Separate "true now" from "what happened," and give agents a deterministic
+   conflict rule.** One tier for atomic current facts (this server), one for
+   narrative history (the vault). When they disagree, the boundary rule decides —
+   an agent should never improvise epistemology mid-task. *(Architecture.)*
+2. **Stage, don't guess.** A write without a confident category lands in a staging
+   queue (`status: staged`) for explicit triage later. An agent that guesses
+   categories at write time pollutes the store silently; a staging queue makes
+   uncertainty visible and reviewable. *(Server-enforced: `memory_write` without
+   `category` stages automatically.)*
+3. **Reversible by default, destructive by exception.** Triage-discard archives;
+   nothing is lost. Hard delete exists (`memory_delete`) but is documented as the
+   marked, deliberate path — and client operating rules require owner confirmation
+   before it. *(Server provides both; the confirmation rule is client-side.)*
+4. **A memory is a claim about when it was written, not a permanent truth.** Every
+   entry carries provenance — surface, session id, timestamps — and readers verify
+   currency before acting on anything consequential. Trust, not blind recall.
+   *(Schema-enforced provenance; verification is a client operating rule.)*
+5. **Search before write.** Near-duplicates accumulate silently in any append-only
+   store; the rule is search first, prefer `memory_update` over a fresh write when
+   a close match exists. *(Client operating rule.)*
+6. **Fail cheap on integration.** A memory system spanning multiple clients needs a
+   zero-side-effect liveness check (`memory_ping`), because tool registration can
+   fail silently while the connection reports healthy — observed in production, not
+   hypothesized. *(Server-enforced; born from TDD.md §12.16.)*
+7. **Write less, deliberately.** Durable facts, decisions, and preferences — not
+   transcripts, not task-local ephemera. A store optimized for recall degrades with
+   every entry that will never matter again. *(Client operating rule.)*
+8. **The store answers; it does not decide.** Recall informs the agent's judgment,
+   and the human owns anything irreversible. Memory infrastructure that quietly
+   drives actions is an authorization problem wearing a persistence costume.
+   *(Design stance, enforced by the allowlist and the client rules above.)*
+
 ## Setup
 
 ### 1. GitHub OAuth App
