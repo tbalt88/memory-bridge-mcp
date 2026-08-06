@@ -43,7 +43,7 @@ export class MemoryBridgeMCP extends McpAgent<Env, Record<string, never>, Props>
 
 		this.server.tool(
 			"memory_write",
-			"Store a memory entry. Omit category to leave it staged for later triage instead of guessing.",
+			"Store a MEMORY-SHAPED entry: an atomic fact, decision, preference, or pointer — paragraphs at most. Routing rule (fabric-routing, 2026-08-06): documents, research, logs, and narratives belong in the vault (vault_capture on Vault Bridge), NEVER here — a memory entry may point at a vault note, not contain one. Omit category to leave it staged for later triage instead of guessing.",
 			{
 				content: z.string().describe("The memory content."),
 				category: z.string().optional().describe("Leave unset to stage for triage."),
