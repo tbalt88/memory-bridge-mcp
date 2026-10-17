@@ -15,18 +15,20 @@ capture-session.sh
         │  - skip reason=resume / missing transcript
         │  - warm the Worker (curl)
         ▼
-spawn detached:  claude -p  (Haiku, MEMORY_BRIDGE_CAPTURE=1)
+spawn detached:  claude -p  (Haiku 5.5, MEMORY_BRIDGE_CAPTURE=1)
         │  runs in the Memory Bridge repo dir (authenticated memory-bridge MCP)
         │  1. memory_ping (retry until connected — beats the connection race)
         │  2. read the transcript
-        │  3. extract ONLY durable facts; skip ephemeral chatter
-        │  4. memory_search to avoid dupes, then memory_write
+        │  3. extract only durable atomic facts/decisions/preferences/pointers;
+        │     documents go to the vault, not here
+        │  4. memory_search each candidate first: skip restatements, write only
+        │     new facts or corrections that cite the superseded entry id
         ▼
 entries land in Memory Bridge, surface="code", session_id set for provenance
 ```
 
 A shell hook can't run an LLM, so the extraction is delegated to a headless
-`claude -p`. It defaults to **Haiku** — extraction is cheap work and this keeps the
+`claude -p`. It defaults to **Haiku 5.5** (`claude-haiku-5-5`) — extraction is cheap work and this keeps the
 per-session cost low.
 
 ### Why `memory_ping` first
@@ -36,6 +38,18 @@ connection setup. Early testing wrote nothing because the agent tried `memory_wr
 before the connection was live ("memory-bridge is still connecting"). The fix: the
 agent calls `memory_ping` first and retries until it returns ok, only then writing.
 The connection warms during those retries.
+
+### Dedupe
+
+The hook itself cannot query Memory Bridge (the server is OAuth-gated and only the
+spawned agent holds a session), so deduplication lives in the prompt: the agent
+runs `memory_search` on each candidate's key terms before any write, writes nothing
+that restates an existing entry, and writes a correction that cites the superseded
+entry's id when a ruling changed. It also skips standing rules that were loaded into
+the session (CLAUDE.md, handoffs, earlier memory results). **Limit:** this is
+enforced by the model following instructions, not by code, so an occasional
+near-duplicate is still possible. A hard guarantee would need a server-side
+content-similarity check in `memory_write`.
 
 ### Recursion guard
 
@@ -72,7 +86,7 @@ it sees that flag. Verified: exactly one capture per real session, no runaway.
 | Var | Default | Purpose |
 |---|---|---|
 | `MEMORY_BRIDGE_DIR` | `~/Documents/Projects/memory-bridge-mcp` | Dir the capture agent runs in (must have `memory-bridge` MCP authenticated). |
-| `MEMORY_BRIDGE_CAPTURE_MODEL` | `claude-haiku-4-5-20251001` | Model for the capture agent. |
+| `MEMORY_BRIDGE_CAPTURE_MODEL` | `claude-haiku-5-5` | Model for the capture agent. |
 | `CLAUDE_BIN` | auto (`command -v claude`) | Path to the claude CLI. |
 | `MEMORY_BRIDGE_CAPTURE` | (unset) | Internal recursion-guard flag — do not set manually. |
 

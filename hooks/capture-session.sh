@@ -31,7 +31,7 @@ fi
 # --- Config ------------------------------------------------------------------
 MEMORY_BRIDGE_DIR="${MEMORY_BRIDGE_DIR:-$HOME/Documents/Projects/memory-bridge-mcp}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude || echo /opt/homebrew/bin/claude)}"
-CAPTURE_MODEL="${MEMORY_BRIDGE_CAPTURE_MODEL:-claude-haiku-4-5-20251001}"
+CAPTURE_MODEL="${MEMORY_BRIDGE_CAPTURE_MODEL:-claude-haiku-5-5}"
 LOG="$HOME/.claude/memory-bridge-capture.log"
 mkdir -p "$(dirname "$LOG")"
 
@@ -58,23 +58,27 @@ for k in ("session_id", "transcript_path", "reason", "cwd"):
 [ -f "$TRANSCRIPT" ] || exit 0             # transcript gone
 
 # --- Extraction instruction for the headless capture agent -------------------
-CAPTURE_PROMPT="You are an automated memory-capture agent for Memory Bridge. A Claude Code session just ended. Your job is to persist durable knowledge from it into Memory Bridge via MCP tools.
+# The hook cannot query Memory Bridge itself (the MCP server is OAuth-gated and
+# only the spawned agent holds a session), so the dedupe check is part of the
+# prompt: the agent runs memory_search before every write.
+CAPTURE_PROMPT="A Claude Code session just ended. Read its transcript and save to Memory Bridge only what a future, unrelated session would want to recall.
 
-STEP 0 — CONFIRM THE CONNECTION IS LIVE BEFORE DOING ANYTHING ELSE.
-Call memory_ping. The remote MCP server can take a few seconds to establish its connection, so if memory_ping errors or the memory tools are not available yet, WAIT briefly and call memory_ping again — retry up to 6 times. Do NOT attempt any memory_write until a memory_ping call has returned ok. If after 6 attempts it still is not connected, stop and report that the connection never came up (write nothing).
-
-STEP 1 — READ THE TRANSCRIPT.
-Read the Claude Code JSONL transcript at:
+The transcript is a JSONL file at:
 
   $TRANSCRIPT
 
-Extract ONLY durable, reusable knowledge worth recalling in a future, unrelated session — decisions made and why, stable user preferences, project facts, gotchas/troubleshooting resolutions, useful references. Do NOT capture ephemeral or task-local chatter, step-by-step narration, or anything that won't matter next week.
+Connection first. The remote memory server can take a few seconds to come up, so call memory_ping before anything else. If it errors or the memory tools are not available yet, wait briefly and retry, up to 6 attempts. Do not call memory_write until a ping has returned ok. If it never connects, write nothing and say so.
 
-STEP 2 — WRITE. For each candidate:
-  a. Call memory_search first to avoid a near-duplicate of something already stored. If a close match exists, skip it.
-  b. If genuinely new, call memory_write with: surface \"code\"; session_id \"$SESSION_ID\"; an appropriate category (decision | preference | project-fact | troubleshooting | reference) OR omit category to stage it if unsure; a few flat tags.
+What belongs in memory: atomic facts, decisions (with the reason), stable preferences, and pointers (where something lives, which ticket or doc to open). One entry per fact, a sentence or two each. Longer material such as documents, plans, write-ups, logs and handoffs belongs in the vault, so leave it out. Also leave out task-local narration, anything that will not matter next week, and standing rules or instructions that were loaded into the session (CLAUDE.md, handoff files, earlier memory results) rather than decided in it. Those are already recorded where they came from, and restating them is how near-identical entries pile up.
 
-Be conservative: a handful of high-value entries is a success; writing nothing is a perfectly valid outcome. Do not summarize the whole session. When done, briefly state what you captured (and confirm memory_ping succeeded)."
+Check before you write. For each candidate, call memory_search on its two or three key terms, and once more with a synonym if the first search finds nothing. Then:
+- If an existing entry already says the same thing, write nothing for it.
+- If the session established something new, write it.
+- If the session changed or reversed what an existing entry says, write the correction and cite the superseded entry's id in the content (for example \"Supersedes <id>: ...\"), so the older entry can be triaged.
+
+Write with memory_write using surface \"code\", session_id \"$SESSION_ID\", a category (decision, preference, project-fact, troubleshooting or reference) or no category to stage the entry if you are unsure, and a few flat tags.
+
+Writing nothing is a normal outcome. Finish with one line per entry written (or \"nothing new\") and whether memory_ping succeeded."
 
 # --- Spawn the detached capture agent ----------------------------------------
 # Export everything the backgrounded subshell needs (references, not embeds —
